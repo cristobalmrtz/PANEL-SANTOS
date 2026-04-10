@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Panel – Barbería Santos</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0b0b0b; --surface: #141414; --border: #2c2c2c;
+    --gold: #c9a84c; --gold-light: #e8c97a; --text: #f0ece4; --muted: #888;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; padding: 1.5rem 1rem; }
+  h1 { font-family: 'Playfair Display', serif; color: var(--gold); font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .subtitle { font-size: 12px; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 1.5rem; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+  .stat { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
+  .stat .n { font-size: 26px; font-weight: 500; color: var(--gold); }
+  .stat .l { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .sec-title { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 10px; }
+  .client-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+  .card-top { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 38px; height: 38px; border-radius: 50%; background: #1a160a; border: 1px solid var(--gold); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; color: var(--gold); flex-shrink: 0; }
+  .ci { flex: 1; min-width: 0; }
+  .ci .nm { font-size: 14px; font-weight: 500; color: var(--text); }
+  .ci .ph { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .ci .dias-txt { font-size: 11px; margin-top: 3px; }
+  .badge { font-size: 10px; padding: 3px 9px; border-radius: 999px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+  .b-urgent  { background: #2a0a0a; color: #e87070; border: 0.5px solid #7a2020; }
+  .b-vence   { background: #2a1a00; color: #ffaa33; border: 0.5px solid #8a4400; }
+  .b-poco    { background: #1a1508; color: var(--gold-light); border: 0.5px solid var(--gold); }
+  .b-ok      { background: #0d1f0e; color: #6abf6e; border: 0.5px solid #2d7a3a; }
+  .btn-wa { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 10px; padding: 10px; background: #25D366; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; font-family: 'DM Sans', sans-serif; }
+  .btn-wa:hover { background: #1ebe5d; }
+  .btn-refresh { background: transparent; border: 0.5px solid var(--gold); color: var(--gold); border-radius: 8px; padding: 10px 20px; font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; margin-bottom: 1.25rem; width: 100%; }
+  .empty   { text-align: center; padding: 2rem; color: var(--muted); font-size: 14px; }
+  .loading { text-align: center; padding: 2rem; color: var(--muted); font-size: 14px; }
+  .c-urgent { color: #e87070; }
+  .c-vence  { color: #ffaa33; }
+  .c-poco   { color: var(--gold-light); }
+  .c-ok     { color: #6abf6e; }
+</style>
+</head>
+<body>
+
+<h1>✂️ Barbería Santos</h1>
+<p class="subtitle">Panel de clientes</p>
+
+<div class="stats">
+  <div class="stat"><div class="n" id="s-total">—</div><div class="l">Total</div></div>
+  <div class="stat"><div class="n" id="s-avisar">—</div><div class="l">Avisar hoy</div></div>
+  <div class="stat"><div class="n" id="s-vencidos">—</div><div class="l">Vencidos</div></div>
+</div>
+
+<button class="btn-refresh" onclick="cargar()">↻ Actualizar clientes</button>
+
+<p class="sec-title">Clientes activos</p>
+<div id="lista"><div class="loading">Cargando...</div></div>
+
+<script>
+var SHEET_URL = 'https://script.google.com/macros/s/AKfycbzlWkPgflLJgXK-OpUzh7Y9Tn6S12AGTLCPEaKSouxc9rIbKzsqUjTEoeZxnYY1WDZkSg/exec';
+
+function initials(nombre) {
+  var p = (nombre || '').trim().split(' ');
+  if (p.length >= 2) return (p[0][0] + p[1][0]).toUpperCase();
+  return (nombre || 'XX').slice(0, 2).toUpperCase();
+}
+
+function diasDesde(fechaStr) {
+  if (!fechaStr) return 0;
+  var str = String(fechaStr);
+  // Soporta tanto "2026-04-10" como "2026-04-10T05:00:00.000Z"
+  var partes = str.substring(0, 10).split('-');
+  if (partes.length < 3) return 0;
+  var corte = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+  var hoy = new Date(); hoy.setHours(0,0,0,0); corte.setHours(0,0,0,0);
+  return Math.round((hoy - corte) / (1000 * 60 * 60 * 24));
+}
+
+// Lógica de mensajes según el día
+function getEstado(dias) {
+  var restantes = 12 - dias;
+  if (dias > 12) {
+    return { badgeClass: 'b-urgent', badgeLabel: '❌ Vencido', colorClass: 'c-urgent',
+             texto: 'Promoción vencida', wa: true,
+             msg: 'Tu promoción ya venció 😔 ¡Pero aún puedes volver! Agenda tu corte y pregúntanos por nuestras promo.' };
+  } else if (dias === 12) {
+    return { badgeClass: 'b-vence', badgeLabel: '🔥 Vence hoy', colorClass: 'c-vence',
+             texto: '¡Vence hoy!', wa: true,
+             msg: '¡Tu promoción vence HOY! 🔥 Tienes hasta hoy para aprovechar tu corte a *$22.000*. ¡No lo dejes pasar! 💈' };
+  } else if (dias >= 10) {
+    return { badgeClass: 'b-poco', badgeLabel: '⚡ Te queda poco', colorClass: 'c-poco',
+             texto: 'Quedan ' + restantes + ' días — te queda poco', wa: true,
+             msg: '¡Ojo! Te quedan solo *' + restantes + ' días* para usar tu promo en Barbería Santos 🎁\n\nTu próximo corte a *$22.000*. ¡Agenda pronto! ✂️' };
+  } else {
+    return { badgeClass: 'b-ok', badgeLabel: restantes + ' días restantes', colorClass: 'c-ok',
+             texto: restantes + ' días restantes', wa: false, msg: '' };
+  }
+}
+
+function buildWA(cliente, msg) {
+  var texto = 'Hola ' + (cliente.nombre || '').split(' ')[0] + ' ✂️\n\n' + msg + '\n\nBarbería Santos 💈';
+  return 'https://wa.me/' + cliente.telefono + '?text=' + encodeURIComponent(texto);
+}
+
+function renderizar(clientes) {
+  if (!clientes || clientes.length === 0) {
+    document.getElementById('lista').innerHTML = '<div class="empty">Sin clientes aún. Cuando alguien escanee el QR aparecerá aquí.</div>';
+    document.getElementById('s-total').textContent = '0';
+    document.getElementById('s-avisar').textContent = '0';
+    document.getElementById('s-vencidos').textContent = '0';
+    return;
+  }
+
+  var avisar = 0, vencidos = 0;
+  var validos = clientes.filter(function(c){ return c.nombre; });
+  var sorted = validos.slice().sort(function(a, b) {
+    return diasDesde(b.fecha) - diasDesde(a.fecha);
+  });
+
+  var html = '';
+  sorted.forEach(function(c) {
+    var dias = diasDesde(c.fecha);
+    var est = getEstado(dias);
+
+    if (dias > 12) vencidos++;
+    if (dias >= 10 && dias <= 12) avisar++;
+
+    var waBtn = '';
+    if (est.wa) {
+      waBtn = '<a class="btn-wa" href="' + buildWA(c, est.msg) + '" target="_blank">📲 Enviar recordatorio por WhatsApp</a>';
+    }
+
+    html += '<div class="client-card">'
+      + '<div class="card-top">'
+      + '<div class="avatar">' + initials(c.nombre) + '</div>'
+      + '<div class="ci">'
+      + '<div class="nm">' + c.nombre + '</div>'
+      + '<div class="ph">' + c.telefono + '</div>'
+      + '<div class="dias-txt ' + est.colorClass + '">Día ' + dias + ' — ' + est.texto + '</div>'
+      + '</div>'
+      + '<span class="badge ' + est.badgeClass + '">' + est.badgeLabel + '</span>'
+      + '</div>'
+      + waBtn
+      + '</div>';
+  });
+
+  document.getElementById('lista').innerHTML = html;
+  document.getElementById('s-total').textContent = validos.length;
+  document.getElementById('s-avisar').textContent = avisar;
+  document.getElementById('s-vencidos').textContent = vencidos;
+}
+
+function cargar() {
+  document.getElementById('lista').innerHTML = '<div class="loading">Cargando clientes...</div>';
+  var proxy = 'https://corsproxy.io/?' + encodeURIComponent(SHEET_URL);
+  fetch(proxy)
+    .then(function(r) { return r.json(); })
+    .then(function(data) { renderizar(data); })
+    .catch(function() {
+      var proxy2 = 'https://api.allorigins.win/get?url=' + encodeURIComponent(SHEET_URL);
+      fetch(proxy2)
+        .then(function(r) { return r.json(); })
+        .then(function(d) { renderizar(JSON.parse(d.contents)); })
+        .catch(function() {
+          document.getElementById('lista').innerHTML = '<div class="empty">Error al conectar. Verifica tu internet e intenta de nuevo.</div>';
+        });
+    });
+}
+
+cargar();
+</script>
+</body>
+</html>
